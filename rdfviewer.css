@@ -1,0 +1,122 @@
+div.resource {
+  font-size: 12px;
+  font-family:Helvetica, Verdana, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+}
+table {
+  background-color: LightBlue;
+  border: 2px solid #99BBDD;
+  border-radius: 10px;
+  margin: 0;
+  padding: 0;
+  margin-left:auto;
+  margin-right:auto;
+}
+
+table.Expression {
+  background-color: #6baed6;
+  border-color: #1f77b4;
+}
+
+table.Work {
+  background-color: #aec7e8;
+  border-color: #1f77b4;
+}
+
+table.Manifestation {
+  background-color: #9ecae1;
+  border-color: #1f77b4;
+}
+
+table.Item, table.Response {
+  background-color: #c6dbef;
+  border-color: #1f77b4;
+}
+
+table.Agent {
+  background-color: #ffbb78;
+  border-color: #ff7f0e;
+}
+
+table.Activity {
+  background-color: #98df8a;
+  border-color: #2ca02c;
+}
+
+table.Plan {
+  background-color: #ff9896;
+  border-color: #d62728;
+}
+
+body {
+    margin: 0px;
+    padding: 0px;
+}
+tr {
+  font-size: 12px;
+  font-family:Helvetica, Verdana, Arial, sans-serif;
+  margin: 0px;
+  padding: 0px;
+}
+td {
+  font-size: 11px;
+  font-family:Helvetica, Verdana, Arial, sans-serif;
+  padding: 2px;
+  margin: 0px;
+  vertical-align: top;
+}
+td.type {
+  font-size: 12px;
+  font-weight:bold;
+}
+
+td.attrName {
+  font-weight:bold;
+}
+th {
+  font-size: 13px;
+  font-family:Helvetica, Verdana, Arial, sans-serif;
+  padding: 2px;
+  margin: 0px;
+}
+
+a {
+  text-align: center;
+  text-decoration: none;
+}
+
+line.link {
+  stroke: #999;
+  stroke-width: 1;
+}
+
+text.link {
+  font-size: 12px;
+  font-family:Helvetica, Verdana, Arial, sans-serif;
+}
+
+polygon.arrowhead {
+  stroke: #999;
+  fill: #999;
+  stroke-width: 1;
+}
+
+.context-menu {
+	visibility:hidden; /* No, you cannot use display:none; */
+	position:absolute;
+	border:1px solid #666;
+	margin:0;
+	padding:3px;
+	list-style:none;
+	width:100px;
+	background-color:#eee;
+} 
+.context-menu li:hover, .context-menu .context-menu-item-active {
+	background-color:#ccc;
+}
+.disabled {
+	color:#999;
+	background-color:#eee !important;
+}
