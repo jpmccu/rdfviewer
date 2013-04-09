@@ -6,13 +6,18 @@ div.resource {
   position: absolute;
 }
 table {
-  background-color: LightBlue;
+  background-color: AliceBlue;
   border: 2px solid #99BBDD;
-  border-radius: 10px;
+  border-radius: 3px;
   margin: 0;
   padding: 0;
   margin-left:auto;
   margin-right:auto;
+}
+
+table.Class {
+  border-radius: 10px;
+  background-color: LightBlue;
 }
 
 table.Expression {
@@ -119,4 +124,43 @@ polygon.arrowhead {
 .disabled {
 	color:#999;
 	background-color:#eee !important;
+}
+
+:root {
+  -webkit-print-color-adjust: exact;
+}
+.compass{
+    fill:  #fff;
+    stroke:  #000;
+    stroke-width:  1.5;
+  }
+  .button{
+    fill:  #225EA8;
+    stroke:  #0C2C84;
+    stroke-miterlimit:	6;
+    stroke-linecap:  round;
+  }
+  .button:hover{
+    stroke-width:  2;
+  }
+  .plus-minus{
+    fill:  #fff;
+    pointer-events: none;
+  }
+body
+{
+  padding: 0;
+  margin: 0;
+  height: 100%;
+  overflow:hidden;
+}
+#content {
+  height: 85%;
+  top: 125;
+  left: 0;
+  position: absolute;
+  width: 99%;
+}
+#header, {
+  height: 150px;
 }

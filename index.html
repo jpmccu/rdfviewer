@@ -11,50 +11,13 @@
     <script type="text/javascript" src="rdf.js"></script>
   <link type="text/css" rel="stylesheet" href="rdfviewer.css"/>
 
-<style>
-  .compass{
-    fill:  #fff;
-    stroke:  #000;
-    stroke-width:  1.5;
-  }
-  .button{
-    fill:  #225EA8;
-    stroke:  #0C2C84;
-    stroke-miterlimit:	6;
-    stroke-linecap:  round;
-  }
-  .button:hover{
-    stroke-width:  2;
-  }
-  .plus-minus{
-    fill:  #fff;
-    pointer-events: none;
-  }
-body
-{
-  padding: 0;
-  margin: 0;
-  height: 100%;
-  overflow:hidden;
-}
-#content {
-  height: 85%;
-  top: 125;
-  left: 0;
-  position: absolute;
-  width: 99%;
-}
-#header, {
-  height: 150px;
-}
-</style>
 </head>
   <body>
     <div id="header">
     <h1><a href='.'>Viewing Relations, Attributes, and Entities in RDF (VRAER)</a></h1>
     <div>
       <form method="get" action="">
-        <input type="text" id="url" name="url" value="http://tw.rpi.edu/web/person/JimHendler" size="100"/>
+        <input type="text" id="url" name="url" value="http://www.w3.org/People/Berners-Lee/card.rdf" size="100"/>
         <input type="submit" value="Redraw"/>
       </form>
     </div>
@@ -67,7 +30,7 @@ function restart(){
     if (loadVal != null) {
         url.value = decodeURIComponent(loadVal);
     }
-    viewrdf("#chart",1000,1000,url.value,500);
+    viewrdf("#chart",1000,1000,url.value,300);
 }
 restart();
    </script>

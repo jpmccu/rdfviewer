@@ -752,12 +752,14 @@ function viewrdf(element, w, h, url,nodeWidth) {
     force.on("tick", function() {
         ticks += 1
         if (ticks > 500) {
-            force.stop();
-            force.charge(0)
+            force.stop()
+                .charge(0)
                 .linkStrength(0)
                 .linkDistance(0)
-                .gravity(0);
-            force.start();
+                .gravity(0)
+                .friction(0)
+                .start()
+                .stop();
         } else {
             force.stop();
             force.linkDistance(function(d){
