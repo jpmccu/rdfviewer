@@ -1,6 +1,9 @@
 RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label";
 FOAF_NAME = "http://xmlns.com/foaf/0.1/name";
+DC_TITLE = "http://purl.org/dc/elements/1.1/title";
+DCT_TITLE = "http://purl.org/dc/terms/title";
+SKOS_PREFLABEL = "http://www.w3.org/2004/02/skos/core#prefLabel";
 
 // Example URLs:
 // http://sparql.tw.rpi.edu/swbig/endpoints/http://hints2005.westat.com:8080/wsrf/services/cagrid/Hints2005/gov.nih.nci.dccps.hints2005.domain.TobaccoUse/1
@@ -220,6 +223,15 @@ Graph.prototype.load = function(d) {
                         resource.label = obj.value;
                         labeled = true;
                     } else if (pred.key == FOAF_NAME && !labeled) {
+                        resource.label = obj.value;
+                        labeled = true;
+                    } else if (pred.key == DC_TITLE && !labeled) {
+                        resource.label = obj.value;
+                        labeled = true;
+                    } else if (pred.key == DCT_TITLE && !labeled) {
+                        resource.label = obj.value;
+                        labeled = true;
+                    } else if (pred.key == SKOS_PREFLABEL && !labeled) {
                         resource.label = obj.value;
                         labeled = true;
                     } else {
@@ -649,20 +661,27 @@ function handleMouseUp(evt) {
 function viewrdf(element, w, h, url,nodeWidth) {
     var chart = d3.select("#content");
     var svg = d3.select("#chart");
+    var force = d3.layout.force()
+
     function updateSize() {
         width = parseInt(chart.style("width"));
         height = parseInt(chart.style("height"));
         svg.attr("width",width)
             .attr("height",height);
+        //force.stop()
+        force.size([width, height]);
+        //    .start();
     }
     $(window).resize(updateSize);
     updateSize();
+    svg.append("rect").attr("width",10000)
+        .attr('height',10000)
+        .attr('fill','white');
     vis = svg.append("g");
 
     loadGraph(url, function(graph) {
 
-        var force = d3.layout.force()
-            .charge(-1000)
+        force.charge(-1000)
             .linkStrength(1)
             .linkDistance(function(d){
                 var width = d.source.width/2 + d.target.width/2 + 25;
@@ -671,8 +690,8 @@ function viewrdf(element, w, h, url,nodeWidth) {
         //.linkDistance(50)
             .gravity(0.05)
             .nodes(graph.nodes)
-            .links(graph.edges)
-            .size([w, h]);
+            .links(graph.edges);
+            //.size([w, h]);
         
         var links = makeLinkSVG(graph.edges, vis);
         links.link.call(force.drag);
@@ -818,7 +837,10 @@ function viewrdf(element, w, h, url,nodeWidth) {
             return d.height = this.childNodes[0].childNodes[0].clientHeight+4;
         })
             .attr("width",function(d) {
-                return d.width = this.childNodes[0].childNodes[0].clientWidth+4;
+                if (d.width == 0 || d.width == nodeWidth) {
+                    d.width = this.childNodes[0].childNodes[0].clientWidth+4;
+                }
+                return d.width;
             })
             .attr("x", function(d) {
                 //d.x = Math.max(d.width/2, Math.min(w-d.width/2, d.x ));
@@ -849,7 +871,7 @@ function viewrdf(element, w, h, url,nodeWidth) {
             });
         //vis.attr("width", w)
         //    .attr("height", h);
-
+        //force.size([width, height]);
     });
     force.start();
     });
