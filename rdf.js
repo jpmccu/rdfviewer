@@ -15,6 +15,7 @@ SKOS_PREFLABEL = "http://www.w3.org/2004/02/skos/core#prefLabel";
 // http://localhost/~jpm78/derivation.ttl
 // http://localhost/~jpm78/4210962_Processor_for_dynamic_programmin.pdf.prov.prov-only.ttl
 // http://localhost/~jpm78/4210962_Processor_for_dynamic_programmin.pdf.prov.ttl
+// https://dl.dropboxusercontent.com/u/9752413/egg.ttl
 
 function getLocale() {
     if ( navigator ) {
@@ -120,14 +121,166 @@ function makeCenteredBox(node) {
     return box;
 }
 
+var OWL = "http://www.w3.org/2002/07/owl#";
+var RDFS = "http://www.w3.org/2000/01/rdf-schema#";
+var XSD = "http://www.w3.org/2001/XMLSchema#";
+
+var extraLabels = {}
+extraLabels[RDFS+"subClassOf"] = "sub-class of";
+extraLabels[OWL+"equivalentClass"] = "equivalent class";
+extraLabels[OWL+"inverseOf"] = "inverse of";
+extraLabels[OWL+"ObjectProperty"] = "Object Property";
+extraLabels[OWL+"DataProperty"] = "Data Property";
+extraLabels[XSD+"length"] = "length";
+extraLabels[XSD+"minLength"] = "minLength";
+extraLabels[XSD+"maxLength"] = "maxLength";
+extraLabels[XSD+"pattern"] = "pattern";
+extraLabels[XSD+"langRange"] = "langRange";
+extraLabels[XSD+"minInclusive"] = "<=";
+extraLabels[XSD+"maxInclusive"] = ">=";
+extraLabels[XSD+"minExclusive"] = "<";
+extraLabels[XSD+"maxExclusive"] = ">";
+
+function conditionalize(fn, condition) {
+    function wrapper() {
+        return fn.apply(null,arguments);
+    }
+    wrapper.onlyif = condition;
+    return wrapper;
+}
+
+var decorators = {
+    anchor: function (callback) { 
+        return function(d) { 
+            var label = callback(d); 
+            label = '<a href="'+d.uri+'">'+label+"</a>";
+            return label;
+        }; 
+    }
+}
+var labelers = [
+    conditionalize(function(resource) {
+        var label = ""
+        var datatype = resource.value(OWL+'onDatatype');
+        var restrictions = resource.relations[OWL+'withRestrictions'].map(function(r) {
+            return d3.entries(r.attribs).filter(function(po) {
+                return extraLabels[po.key] != null;
+            }).map(function(po) {
+                return extraLabels[po.key]+po.value[0];
+            }).join("");
+        });
+        label = label + getLabel(datatype)+'['+restrictions.join(", ")+']';
+        console.log("facet:",label, resource);
+        return label;
+    },
+    function(resource) {
+        return resource.uri 
+            && (resource.types.map(function(d){return d.uri}).indexOf(RDFS+'Datatype') != -1) 
+            && (resource.value(OWL+'onDatatype'));
+    }),
+    conditionalize(function(resource) {
+        var label = ""
+        if (resource.relations[OWL+'intersectionOf']) {
+            label = label + resource.relations[OWL+'intersectionOf'].map(getLabel).join(" and ");
+        } else if (resource.relations[OWL+'unionOf']) {
+            label = label + resource.relations[OWL+'unionOf'].map(getLabel).join(" or ");
+        } else if (resource.relations[OWL+'complementOf']) {
+            label = label + "cannot be "+resource.relations[OWL+'complementOf'].map(getLabel).join(", nor ");
+        } else if (resource.relations[OWL+'datatypeComplementOf']) {
+            label = label + "cannot be "+resource.relations[OWL+'datatypeComplementOf'].map(getLabel).join(", nor ");
+        } else if (resource.relations[OWL+'oneOf']) {
+            label = label + "is one of {"+ resource.relations[OWL+'oneOf'].map(getLabel).join(", ")+"}";
+        } else if (resource.value(OWL+'onDatatype')) {
+            console.warn("not handling datatype",resource);
+        } else {
+            console.warn("Not handling class",resource);
+        }
+        if (resource.types.map(function(d){return d.uri}).indexOf(RDFS+'Datatype') != -1) {
+            console.warn("Datatype:",resource);
+        }
+        if (label.length > 0) label = "("+label+")";
+        return label;
+    },
+    function(resource) {
+        return resource.uri && resource.uri.indexOf("_:") == 0 
+            && (resource.types.map(function(d){return d.uri}).indexOf(OWL+'Class') != -1
+                || resource.types.map(function(d){return d.uri}).indexOf(RDFS+'Datatype') != -1)
+    }),
+    conditionalize(function(resource) {
+        var label = getLabel(resource.relations[OWL+'onProperty'][0]);
+
+        if (resource.value(OWL+'hasValue')) {
+            label = label + " value " + getLabel(resource.value(OWL+'hasValue'));
+        } else if (resource.value(OWL+'someValuesFrom')) {
+            label = label + " some " + getLabel(resource.value(OWL+'someValuesFrom'));
+        } else if (resource.value(OWL+'allValuesFrom')) {
+            var l =  getLabel(resource.value(OWL+'allValuesFrom'));
+            console.log(l, resource.value(OWL+'allValuesFrom'));
+            label = label + " only " + l;
+        } else if (resource.value(OWL+'hasSelf')) {
+            label = label + " self " ;
+        } else if (resource.value(OWL+'minCardinality')) {
+            label = label + " min " + resource.value(OWL+'minCardinality');
+        } else if (resource.value(OWL+'minQualifiedCardinality')) {
+            label = label + " min " + resource.value(OWL+'minQualifiedCardinality');
+            if (resource.value(OWL+'onClass'))
+                label = label + " " + getLabel(resource.value(OWL+'onClass'));
+            else if (resource.value(OWL+'onDataRange'))
+                label = label + " " + getLabel(resource.value(OWL+'onDataRange'));
+        } else if (resource.value(OWL+'maxCardinality')) {
+            label = label + " max " + resource.value(OWL+'maxCardinality');
+        } else if (resource.value(OWL+'maxQualifiedCardinality')) {
+            label = label + " max " + resource.value(OWL+'maxQualifiedCardinality');
+            if (resource.value(OWL+'onClass'))
+                label = label + " " + getLabel(resource.value(OWL+'onClass'));
+            else if (resource.value(OWL+'onDataRange'))
+                label = label + " " + getLabel(resource.value(OWL+'onDataRange'));
+        } else if (resource.value(OWL+'maxCardinality')) {
+            label = label + " max " + resource.value(OWL+'maxCardinality');
+        } else if (resource.value(OWL+'cardinality')) {
+            label = label + " exactly " + resource.value(OWL+'cardinality');
+        } else if (resource.value(OWL+'qualifiedCardinality')) {
+            label = label + " exactly " + resource.value(OWL+'qualifiedCardinality');
+            if (resource.value(OWL+'onClass'))
+                label = label + " " + getLabel(resource.value(OWL+'onClass'));
+            else if (resource.value(OWL+'onDataRange'))
+                label = label + " " + getLabel(resource.value(OWL+'onDataRange'));
+        } else {
+            console.warn("not handling restriction",resource);
+        }
+
+        return label;
+    },
+    function(resource) {
+        return resource.uri && resource.type == 'resource' 
+            && resource.types.map(function(d){return d.uri}).indexOf(OWL+'Restriction') != -1
+    }),
+    conditionalize(decorators.anchor(function(d) {
+        var ext = d.uri.split('.');
+        ext = ext[ext.length-1];
+        if (ext == 'ico') {
+            return '<img src="'+d.uri+'" alt="'+label+'"/>'
+        }
+        return '<img width="100" src="'+d.uri+'" alt="'+d.label+'"/>';
+    }),
+    function(d) {
+        if (!d.uri) return false;
+        var ext = d.uri.split('.');
+        ext = ext[ext.length-1];
+        return $.inArray(ext, ['jpeg','jpg','png','gif','ico']) != -1;
+    }),
+    conditionalize(decorators.anchor(function (d) {
+        if (d.label) return d.label;
+        else return d;
+    }),
+    function(d) {return true})
+]
+
 function getLabel(d) {
-    ext = d.uri.split('.');
-    ext = ext[ext.length-1];
-    if ($.inArray(ext, ['jpeg','jpg','png','gif',]) != -1) {
-        return '<img width="100" src="'+d.uri+'" alt="'+d.label+'"/>'
-    //} else if (d.label == " ") {
-    //    return '<img src="'+getGravatar(d.uri)+'" width="20" height="20"/>&nbsp;';
-    } else return d.label; 
+    var mylabels = labelers.filter(function(fn) {return fn.onlyif(d)});
+    var result =  mylabels[0](d);
+    //console.log(d, mylabels, result);
+    return result;
 }
 
 function getGravatar(uri) {
@@ -179,6 +332,12 @@ Graph.prototype.getResource = function(uri) {
     var result = this.resources[uri];
     if (result == null) {
         result = {};
+        result.value = function(uri) {
+            var results = result.relations[uri];
+            if (results == null || results.length == 0) results = result.attribs[uri];
+            if (results == null || results.length == 0) return null;
+            return results[0];
+        };
         result.width = 0;
         result.type = 'resource';
         result.types = [];
@@ -194,6 +353,9 @@ Graph.prototype.getResource = function(uri) {
         result.localPart = result.localPart.split("/");
         result.localPart = result.localPart[result.localPart.length-1];
         result.label = result.localPart;
+        if (extraLabels[uri]) {
+            result.label = extraLabels[uri];
+        }
         result.links = [];
         result.isPredicate = false;
         this.resources[uri] = result;
@@ -201,8 +363,55 @@ Graph.prototype.getResource = function(uri) {
     return result;
 }
 
+function squashLists(d) {
+    var lists = {};
+    var resources = {};
+
+    d3.entries(d).forEach(function(subj){
+        if (subj.value['http://www.w3.org/1999/02/22-rdf-syntax-ns#first']) {
+            lists[subj.key] = subj.value;
+        }
+        else resources[subj.key] = subj.value;
+    });
+
+    var result = {};
+
+    d3.entries(resources).forEach(function(subj) {
+
+        if (subj.key == 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil')
+            return;
+        result[subj.key] = {};
+        d3.entries(subj.value).forEach(function(pred) {
+            var list = [];
+            result[subj.key][pred.key] = list;
+            pred.value.forEach(function(obj) {
+                if (lists[obj.value]) {
+                    var o = obj.value;
+                    //console.log(o);
+                    while (o) {
+                        o = lists[o];
+                        //console.log(o);
+                        list.push(o['http://www.w3.org/1999/02/22-rdf-syntax-ns#first'][0])
+                        o = o['http://www.w3.org/1999/02/22-rdf-syntax-ns#rest'][0].value;
+                        //console.log(o);
+                        if (o == 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil')
+                            o = null;
+                    }
+                } else {
+                    list.push(obj);
+                }
+            })
+        })
+    })
+    //console.log(result);
+    return result;
+}
+
+
+
 Graph.prototype.load = function(d) {
-    g = this
+    var g = this
+    d = squashLists(d);
     d3.entries(d).forEach(function(subj) {
         d3.entries(subj.value).forEach(function(pred) {
             pred.value.forEach(function(obj) {
@@ -215,7 +424,7 @@ Graph.prototype.load = function(d) {
                     if (obj.lang != null) {
                         if (locale.lastIndexOf(obj.lang, 0) === 0) {
                         } else {
-                            console.log(obj.lang);
+                            //console.log(obj.lang);
                             return;
                         }
                     }
@@ -260,6 +469,27 @@ Graph.prototype.load = function(d) {
             })
         })
     });
+    function hideSP(sp) {
+        sp.display=false;
+        sp.links.forEach(function(l){l.display=false});
+        sp.predicate=true;
+    }
+    d3.values(g.resources).filter(function(resource){
+        return (resource.type == 'resource' 
+                && resource.types.map(function(d){return d.uri}).indexOf(OWL+'Restriction') != -1) ||
+               (resource.uri.indexOf("_:") == 0 && resource.types
+                && (resource.types.map(function(d){return d.uri}).indexOf(OWL+'Class') != -1
+                    || resource.types.map(function(d){return d.uri}).indexOf(OWL+'Datatype') != -1))
+    }).forEach(function(resource){
+        resource.objectOf.forEach(function(sp){
+            resource.display = false;
+            if (sp.subject.attribs[sp.predicate.uri] == null) {
+                sp.subject.attribs[sp.predicate.uri] = [];
+            }
+            sp.subject.attribs[sp.predicate.uri].push(resource);
+            //console.log(sp);
+        })
+    })
 
     d3.values(g.resources).filter(function(resource){
         var result = resource.type == "predicate";
@@ -283,6 +513,21 @@ Graph.prototype.load = function(d) {
         });
     });
     
+    g.predicates = d3.values(g.resources).filter(function(node) {
+        if (node.type == 'predicate' && !node.isPredicate) {
+            node.display = node.display && node.subject.display;
+            return node.display;
+        } else return false;
+    }).filter(function(node){
+        node.display = node.display && node.objects.reduce(function(prev, o) {
+            return prev || o.display;
+        },false);
+        return node.display;
+    });
+    g.predicates.forEach(function(p) {
+        p.label = p.predicate.label;
+    });
+
     g.nodes = d3.values(g.resources).filter(function(node) {
         return (!node.isPredicate && node.display);
     });
@@ -293,24 +538,13 @@ Graph.prototype.load = function(d) {
         return a.objectOf.length - b.objectOf.length;
     });
     
-    g.predicates = d3.values(g.resources).filter(function(node) {
-        return (node.type == 'predicate' && !node.isPredicate && node.display);
-    });
-    g.predicates.forEach(function(p) {
-        p.label = p.predicate.label;
-    });
-    
+    //console.log(g.entities)    
     g.edges = d3.values(g.edges).filter(function(l) {
-        return l.display;
+        return l.display && l.source.display && l.target.display;
     });
 }
-    
-function loadGraph(url, fn) {
-    function doLoad(d) {
-        graph = new Graph();
-        graph.load(d);
-        fn(graph);
-    }
+
+function loader(url, doLoad) {
     $.getJSON("http://rdf-translator.appspot.com/convert/detect/rdf-json/"+url, doLoad)
         .error(function() {
             $.getJSON("http://rdf-translator.appspot.com/convert/xml/rdf-json/"+url, doLoad)
@@ -321,6 +555,15 @@ function loadGraph(url, fn) {
                         });
                 });
         });
+}
+    
+function loadGraph(url, fn) {
+    function doLoad(d) {
+        graph = new Graph();
+        graph.load(d);
+        fn(graph);
+    }
+    loader(url, doLoad);
 }
 
 function makeNodeSVG(entities, vis, nodeWidth, graph) {
@@ -333,23 +576,24 @@ function makeNodeSVG(entities, vis, nodeWidth, graph) {
     
     node.append("xhtml:body").attr('xmlns',"http://www.w3.org/1999/xhtml");
     
-    var body = node.selectAll("body");
-    var resource = body.append("table")
+    var body = node.selectAll("body")
+        //.style("max-width",nodeWidth+"px")
+    var resource = body//.append("div")
+        //.style("max-width","100%")
+        //.style("display","block")
+        .append("table")
         .attr("class",function(d) {
             var classes = d.types.map(function(d){ return d.localPart;})
             return "resource "+classes.join(" ");
-        });
+        })
+        .style("table-layout","fixed");
     var titles = resource.append("xhtml:tr")
         .append("xhtml:th")
-        .attr("colspan","2")
-        .append("xhtml:a")
+        .style("word-wrap","break-word")
+        .style("max-width",nodeWidth+"px")
         .attr("class","title")
-        .html(function(d) {
-            if (d.label == " ")
-                return getLabel(d);
-            else return d.label; 
-        })
-        .attr("href",function(d) { return d.uri});
+        .attr("colspan","2")
+        .html(function(d) { return getLabel(d); })
     var types = resource.append("xhtml:tr")
         .append("xhtml:td")
         .attr("colspan","2")
@@ -383,32 +627,13 @@ function makeNodeSVG(entities, vis, nodeWidth, graph) {
             else return predicate.localPart+":";
         });
     attrs.append("xhtml:td")
+        .style("word-wrap","break-word")
+        .style("max-width",nodeWidth+"px")
+        //.style("width","60%")
         .html(function(d) {
             return d.value.map(function(d) {
                 if (d.type == "resource") {
-                    label = d.label;
-                    ext = d.uri.split('.');
-                    if (ext == 'jpg') console.log(d);
-                    ext = ext[ext.length-1];
-                    if ($.inArray(ext, ['jpeg','jpg','png','gif',]) != -1) {
-                        console.log(d.uri);
-                        label = '<img width="100" src="'+d.uri+'" alt="'+label+'"/>'
-                    }
-                    if (ext == 'ico') {
-                        label = '<img src="'+d.uri+'" alt="'+label+'"/>'
-                    }
-                    if (label == " ")
-                        label = getLabel(d);//'<img src="RDFicon.png" width="12" height="12"/>&nbsp;';
-                    result = '<a href="'+d.uri+'">'+label+'</a>';
-
-                    typeLabels = d.types.map(function(t) {
-                        return '<a href="'+t.uri+'">'+t.label+'</a>';
-                    });
-                    if (typeLabels.length > 0) {
-                        result +=  " (a&nbsp;" + typeLabels.join(", ") +")";
-                    }
-
-                    return result;
+                    return getLabel(d);
                 } else return d;
             }).join(", ");
         });
@@ -518,8 +743,8 @@ function viewHierarchyRDF(element, w, h, url, nodeWidth) {
         .attr("dy", 3)
         .attr("text-anchor", function(d) { return d.children ? "end" : "start"; })
         .text(function(d) {
-            console.log(d.label);
-            console.log(d);
+            //console.log(d.label);
+            //console.log(d);
             return d.label; 
         });
     });
@@ -539,129 +764,32 @@ function makeMenu(element) {
         .append("xhtml:li")
         .attr("id",function(d){return d.id;})
         .html(function(d){return d.text;});
-    console.log($('div svg body a'));
+    //console.log($('div svg body a'));
     $('a').contextMenu('linkMenu', {
         bindings: {
             'open': function(t) {
-                console.log(t);
+                //console.log(t);
                 alert('Trigger was '+t.id+'\nAction was Open');
             },
             'addLabels': function(t) {
-                console.log(t);
+                //console.log(t);
                 alert('Trigger was '+t.id+'\nAction was Link in labels');
             },
             'addAll': function(t) {
-                console.log(t);
+                //console.log(t);
                 alert('Trigger was '+t.id+'\nAction was Link in all data');
             },
         },
     });
 }
 
-var transMatrix = [1,0,0,1,0,0];
-var vis = null;
-var width = 0;
-var height = 0;
-
-function pan(dx, dy)
-{     	
-  transMatrix[4] += dx;
-  transMatrix[5] += dy;
-            
-  newMatrix = "matrix(" +  transMatrix.join(' ') + ")";
-  vis.attr("transform", newMatrix);
-}
-
-function zoom(scale)
-{
-  for (var i=0; i<transMatrix.length; i++)
-  {
-    transMatrix[i] *= scale;
-  }
-
-  transMatrix[4] += (1-scale)*width/2;
-  transMatrix[5] += (1-scale)*height/2;
-		        
-  newMatrix = "matrix(" +  transMatrix.join(' ') + ")";
-  vis.attr("transform", newMatrix);
-}
-
-function handleMouseWheel(evt) {
-    if(evt.preventDefault)
-	evt.preventDefault();
-    
-    evt.returnValue = false;
-    
-    var delta;
-    
-    if(evt.wheelDelta)
-	delta = evt.wheelDelta / 3600; // Chrome/Safari
-    else
-	delta = evt.detail / -90; // Mozilla
-    
-    var z = 1 + delta; // Zoom factor: 0.9/1.1
-    zoom(z);
-}
-
-var state = "none";
-/**
- * Handle mouse move event.
- */
-function handleMouseMove(evt) {
-    if(evt.preventDefault)
-	evt.preventDefault();
-    
-    evt.returnValue = false;
-    
-    var svgDoc = evt.target.ownerDocument;
-    
-    var g = getRoot(svgDoc);
-    
-    if(state == 'pan' && enablePan) {
-	// Pan mode
-	var p = getEventPoint(evt).matrixTransform(stateTf);
-        
-	setCTM(g, stateTf.inverse().translate(p.x - stateOrigin.x, p.y - stateOrigin.y));
-    } else if(state == 'drag' && enableDrag) {
-	// Drag mode
-	var p = getEventPoint(evt).matrixTransform(g.getCTM().inverse());
-        
-	setCTM(stateTarget, root.createSVGMatrix().translate(p.x - stateOrigin.x, p.y - stateOrigin.y).multiply(g.getCTM().inverse()).multiply(stateTarget.getCTM()));
-        
-	stateOrigin = p;
-    }
-}
-
-/**
- * Handle click event.
- */
-function handleMouseDown(evt) {
-    if(evt.preventDefault)
-	evt.preventDefault();
-    evt.returnValue = false;
-    state = 'drag';
-}
-
-/**
- * Handle mouse button release event.
- */
-function handleMouseUp(evt) {
-    if(evt.preventDefault)
-	evt.preventDefault();
-    
-    evt.returnValue = false;
-    
-    if(state == 'pan' || state == 'drag') {
-	// Quit pan mode
-	state = '';
-    }
-}
-
-
 function viewrdf(element, w, h, url,nodeWidth) {
-    var chart = d3.select("#content");
-    var svg = d3.select("#chart");
+    var svg = d3.select(element);
+    var chart = d3.select(svg.node().parentNode);
     var force = d3.layout.force()
+    var transMatrix = [1,0,0,1,0,0];
+    var width = 0;
+    var height = 0;
 
     function updateSize() {
         width = parseInt(chart.style("width"));
@@ -677,9 +805,95 @@ function viewrdf(element, w, h, url,nodeWidth) {
     svg.append("rect").attr("width",10000)
         .attr('height',10000)
         .attr('fill','white');
-    vis = svg.append("g");
+    var vis = svg.append("g");
 
     loadGraph(url, function(graph) {
+
+        function pan(dx, dy) {       
+            transMatrix[4] += dx;
+            transMatrix[5] += dy;
+
+            newMatrix = "matrix(" +  transMatrix.join(' ') + ")";
+            vis.attr("transform", newMatrix);
+        }
+
+        function zoom(scale) {
+            for (var i=0; i<transMatrix.length; i++) {
+                transMatrix[i] *= scale;
+            }
+
+            transMatrix[4] += (1-scale)*width/2;
+            transMatrix[5] += (1-scale)*height/2;
+
+            newMatrix = "matrix(" +  transMatrix.join(' ') + ")";
+            vis.attr("transform", newMatrix);
+        }
+
+        function handleMouseWheel(evt) {
+            if(evt.preventDefault)
+                evt.preventDefault();
+
+            evt.returnValue = false;
+
+            var delta;
+
+            if (evt.wheelDelta) delta = evt.wheelDelta / 3600; // Chrome/Safari
+            else delta = evt.detail / -90; // Mozilla
+            var z = 1 + delta; // Zoom factor: 0.9/1.1
+            zoom(z);
+        }
+
+        var state = "none";
+        /**
+         * Handle mouse move event.
+        */
+        function handleMouseMove(evt) {
+            if(evt.preventDefault)
+                evt.preventDefault();
+    
+            evt.returnValue = false;
+    
+            var svgDoc = evt.target.ownerDocument;
+
+            var g = getRoot(svgDoc);
+    
+            if(state == 'pan' && enablePan) {
+                // Pan mode
+                var p = getEventPoint(evt).matrixTransform(stateTf);
+
+                setCTM(g, stateTf.inverse().translate(p.x - stateOrigin.x, p.y - stateOrigin.y));
+            } else if(state == 'drag' && enableDrag) {
+                // Drag mode
+                var p = getEventPoint(evt).matrixTransform(g.getCTM().inverse());
+                setCTM(stateTarget, root.createSVGMatrix().translate(p.x - stateOrigin.x, p.y - stateOrigin.y).multiply(g.getCTM().inverse()).multiply(stateTarget.getCTM()));
+                stateOrigin = p;
+            }
+        }
+
+        /**
+         * Handle click event.
+         */
+        function handleMouseDown(evt) {
+            if(evt.preventDefault)
+                evt.preventDefault();
+            evt.returnValue = false;
+            state = 'drag';
+        }
+
+        /**
+         * Handle mouse button release event.
+         */
+        function handleMouseUp(evt) {
+            if(evt.preventDefault)
+                evt.preventDefault();
+
+            evt.returnValue = false;
+
+            if(state == 'pan' || state == 'drag') {
+                // Quit pan mode
+                state = '';
+            }
+        }
 
         force.charge(-1000)
             .linkStrength(1)
@@ -767,7 +981,7 @@ function viewrdf(element, w, h, url,nodeWidth) {
 	    svg.node().addEventListener('DOMMouseScroll', handleMouseWheel, false); // Others
 
     //makeMenu(element);
-    ticks = 0
+    var ticks = 0
     force.on("tick", function() {
         ticks += 1
         if (ticks > 500) {
@@ -789,8 +1003,8 @@ function viewrdf(element, w, h, url,nodeWidth) {
         }
       	links.link.selectAll("line.link")
             .attr("x1", function(d) {
-                box = makeCenteredBox(d.source);
-                ept = edgePoint(box,
+                var box = makeCenteredBox(d.source);
+                var ept = edgePoint(box,
                                 [d.source.x,d.source.y],
                                 [d.target.x,d.target.y]);
                 d.x1 = d.source.x;
@@ -800,8 +1014,8 @@ function viewrdf(element, w, h, url,nodeWidth) {
                 return d.x1; 
             })
             .attr("y1", function(d) {
-                box = makeCenteredBox(d.source);
-                ept = edgePoint(box,
+                var box = makeCenteredBox(d.source);
+                var ept = edgePoint(box,
                                 [d.source.x,d.source.y],
                                 [d.target.x,d.target.y]);
                 d.y1 = d.source.y;
@@ -811,8 +1025,8 @@ function viewrdf(element, w, h, url,nodeWidth) {
                 return d.y1; 
             })
             .attr("x2", function(d) {
-                box = makeCenteredBox(d.target);
-                ept = edgePoint(box,
+                var box = makeCenteredBox(d.target);
+                var ept = edgePoint(box,
                                 [d.source.x,d.source.y],
                                 [d.target.x,d.target.y]);
                 d.x2 = d.target.x;
@@ -822,8 +1036,8 @@ function viewrdf(element, w, h, url,nodeWidth) {
                 return d.x2; 
             })
             .attr("y2", function(d) { 
-                box = makeCenteredBox(d.target);
-                ept = edgePoint(box,
+                var box = makeCenteredBox(d.target);
+                var ept = edgePoint(box,
                                 [d.source.x,d.source.y],
                                 [d.target.x,d.target.y]);
                 d.y2 = d.target.y;
@@ -866,7 +1080,7 @@ function viewrdf(element, w, h, url,nodeWidth) {
                     [d.x2+3,d.y2+8].join(",")].join(" ");
         })
             .attr("transform",function(d) {
-                angle = Math.atan2(d.y2-d.y1, d.x2-d.x1)*180/Math.PI + 90;
+                var angle = Math.atan2(d.y2-d.y1, d.x2-d.x1)*180/Math.PI + 90;
                 return "rotate("+angle+", "+d.x2+", "+d.y2+")";
             });
         //vis.attr("width", w)
@@ -876,4 +1090,3 @@ function viewrdf(element, w, h, url,nodeWidth) {
     force.start();
     });
 }
-
