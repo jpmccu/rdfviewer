@@ -17,6 +17,12 @@ SKOS_PREFLABEL = "http://www.w3.org/2004/02/skos/core#prefLabel";
 // http://localhost/~jpm78/4210962_Processor_for_dynamic_programmin.pdf.prov.ttl
 // https://dl.dropboxusercontent.com/u/9752413/egg.ttl
 
+d3.selection.prototype.moveToFront = function() {
+  return this.each(function(){
+    this.parentNode.appendChild(this);
+  });
+};
+
 function getLocale() {
     if ( navigator ) {
         if ( navigator.language ) {
@@ -170,7 +176,7 @@ var labelers = [
             }).join("");
         });
         label = label + getLabel(datatype)+'['+restrictions.join(", ")+']';
-        console.log("facet:",label, resource);
+        //console.log("facet:",label, resource);
         return label;
     },
     function(resource) {
@@ -215,7 +221,7 @@ var labelers = [
             label = label + " some " + getLabel(resource.value(OWL+'someValuesFrom'));
         } else if (resource.value(OWL+'allValuesFrom')) {
             var l =  getLabel(resource.value(OWL+'allValuesFrom'));
-            console.log(l, resource.value(OWL+'allValuesFrom'));
+            //console.log(l, resource.value(OWL+'allValuesFrom'));
             label = label + " only " + l;
         } else if (resource.value(OWL+'hasSelf')) {
             label = label + " self " ;
@@ -348,9 +354,9 @@ Graph.prototype.getResource = function(uri) {
         result.uri = uri;
         result.label = ' ';
         result.depth = -1;
-        result.localPart = result.uri.split("#");
+        result.localPart = result.uri.split("#").filter(function(d) {return d.length > 0});
         result.localPart = result.localPart[result.localPart.length-1];
-        result.localPart = result.localPart.split("/");
+        result.localPart = result.localPart.split("/").filter(function(d) {return d.length > 0});
         result.localPart = result.localPart[result.localPart.length-1];
         result.label = result.localPart;
         if (extraLabels[uri]) {
@@ -566,13 +572,15 @@ function loadGraph(url, fn) {
     loader(url, doLoad);
 }
 
-function makeNodeSVG(entities, vis, nodeWidth, graph) {
+function makeNodeSVG(entities, vis, nodeWidth, graph, renderer) {
     var node = vis.selectAll("g.node")
         .data(entities)
         .enter();
+
     node = node.append("svg:foreignObject")
         .attr('width',nodeWidth)
-        .attr('height','1000');
+        .attr('height','1000')
+        .attr("cursor", "pointer");
     
     node.append("xhtml:body").attr('xmlns',"http://www.w3.org/1999/xhtml");
     
@@ -637,6 +645,7 @@ function makeNodeSVG(entities, vis, nodeWidth, graph) {
                 } else return d;
             }).join(", ");
         });
+    node.selectAll("img").on("load", renderer);
     return node;
 }
 
@@ -647,6 +656,7 @@ function makePredicateSVG(predicates, vis) {
         .append("svg:text")
         .attr("class","link")
         .attr("text-anchor","middle")
+        .attr("alignment-baseline","middle")
         .attr("x", function(d) { return d.x; })
         .attr("y", function(d) { return d.y; })
         .text(function(d){
@@ -654,6 +664,7 @@ function makePredicateSVG(predicates, vis) {
              else return d.predicate.localPart;
             return d.predicate.label;
         })
+        .attr("cursor", "pointer")
         .attr("xlink:href",function(d) { return d.predicate.uri;});
     return result;
 }
@@ -689,404 +700,308 @@ function makeLinkSVG(edges, vis) {
     return result;
 }
 
-function viewHierarchyRDF(element, w, h, url, nodeWidth) {
-    var cluster = d3.layout.cluster()
-        .size([h, w - 300])
-        .children(function(d) {
-            return d.links.map(function(l) {
-                return l.target;
-            });
-        })
-        .sort(function(a, b) {
-            if (a < b) return -1;
-            else if (b > a) return 1;
-            else return 0;
-        });
-    
-    var diagonal = d3.svg.diagonal()
-        .projection(function(d) { return [d.y, d.x]; });
-    
-    var vis = d3.select(element).append("svg:svg")
-        .attr("width", w)
-        .attr("height", h)
-        .append("svg:g")
-        //.attr("transform", "translate(200, 20)");
-    svgRoot = vis.node();
+var layout = {};
 
-    loadGraph(url, function(graph){
+function uuid4() {
+    var d = new Date().getTime();
+    var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = (d + Math.random()*16)%16 | 0;
+        d = Math.floor(d/16);
+        return (c=='x' ? r : (r&0x3|0x8)).toString(16);
+    });
+    return uuid;
+}
+    
 
-    nodes = graph.entities.concat(graph.predicates);
-    graph.entities.forEach(function(d) {
-        if (d.depth < 0)
-            cluster.nodes(d);
+layout.dagre = function(nodes, predicates, links, rankDir) {
+    if (!rankDir) rankDir = 'lr';
+    // Create a new directed graph 
+    var g = new dagre.graphlib.Graph({ multigraph: true});
+    
+    // Set an object for the graph label
+    g.setGraph({});
+    
+    // Default to assigning a new object as a label for each new edge.
+    g.setDefaultEdgeLabel(function() { return {}; });
+
+    nodes.forEach(function(node) {
+        if (!node.id) {
+            if (node.type == 'resource') {
+                node.id = node.uri;
+            } else {
+                node.id = uuid4();
+            }
+        }
+        g.setNode(node.uri, node);
     });
-    links = cluster.links(nodes);
-    var link = vis.selectAll("path.link")
-        .data(links)
-        .enter().append("svg:path")
-        .attr("class", "link")
-        .attr("d", diagonal);
-    
-    var node = vis.selectAll("g.node")
-        .data(nodes)
-        .enter().append("svg:g")
-        .attr("class", "node")
-        .attr("transform", function(d) { 
-            return "translate(" + d.y + "," + d.x + ")";
-        })
-    
-    node.append("svg:circle")
-        .attr("r", 4.5);
-    
-    node.append("svg:text")
-        .attr("dx", function(d) { return d.children ? -8 : 8; })
-        .attr("dy", 3)
-        .attr("text-anchor", function(d) { return d.children ? "end" : "start"; })
-        .text(function(d) {
-            //console.log(d.label);
-            //console.log(d);
-            return d.label; 
-        });
+
+    predicates.forEach(function(predicate) {
+        if (!predicate.id) {
+            predicate.id = uuid4();
+        }
+        g.setNode(predicate.uri, predicate);
     });
+
+    links.forEach(function(link) {
+        g.setEdge(link.source.uri, link.target.uri);
+    });
+
+    g.graph().nodesep = 20;
+    g.graph().ranksep = 20;
+    g.graph().rankDir = rankDir;
+    //g.graph().align = 'lr';
+    //g.graph().ranker = "tight-tree";
+    //g.graph().acyclicer = "greedy";
+    dagre.layout(g);
+
+    var dimension = 'x',
+        down = d3.min,
+        up = d3.max;
+    switch (rankDir) {
+    case 'lr':
+        dimension = 'x';
+        down = d3.min;
+        up = d3.max;
+        break;
+    case 'lr':
+        dimension = 'x';
+        down = d3.min;
+        up = d3.max;
+        break;
+    case 'rl':
+        dimension = 'x';
+        down = d3.max;
+        up = d3.min;
+        break;
+    case 'tb':
+        dimension = 'y';
+        down = d3.min;
+        up = d3.max;
+        break;
+    case 'bt':
+        dimension = 'y';
+        down = d3.max;
+        up = d3.min;
+        break;
+    }
+
+    var positions = d3.set(d3.merge([predicates.map(function(x){ return x[dimension]} ),
+                                    nodes.map(function(x){ return x[dimension]})]))
+        .values().map(parseFloat);
+    var scale = d3.scale.threshold().domain(positions).range(positions);
+
+    predicates.forEach(function(predicate) {
+        var subj = predicate.subject[dimension];
+        var obj = down(predicate.objects, function(d) { return d[dimension];});
+        var extent = d3.extent([subj,obj]);
+        if (predicate[dimension] < extent[0] || predicate[dimension] > extent[1])
+            predicate[dimension] = scale(d3.mean(extent));
+    });
+    return g;
 }
 
-function makeMenu(element) {
-    var ul = d3.select(element).append("xhtml:div")
-        .attr("class","contextMenu")
-        .attr("id","linkMenu")
-        .append("xhtml:ul");
-    var items = [
-        {id:'open',text:'Open'},
-        {id:'addLabels',text:'Link in labels'},
-        {id:'addAll',text:'Link in all data'}
-    ]
-    ul.selectAll("m.menu").data(items).enter()
-        .append("xhtml:li")
-        .attr("id",function(d){return d.id;})
-        .html(function(d){return d.text;});
-    //console.log($('div svg body a'));
-    $('a').contextMenu('linkMenu', {
-        bindings: {
-            'open': function(t) {
-                //console.log(t);
-                alert('Trigger was '+t.id+'\nAction was Open');
-            },
-            'addLabels': function(t) {
-                //console.log(t);
-                alert('Trigger was '+t.id+'\nAction was Link in labels');
-            },
-            'addAll': function(t) {
-                //console.log(t);
-                alert('Trigger was '+t.id+'\nAction was Link in all data');
-            },
-        },
-    });
+layout.force = function() {
+    function fn(nodes, links, update) {
+    force.start();
+    }
+    fn.force = d3.layout.force();
+    fn.force.size([width, height]);
+    fn.force.charge(-1000)
+        .linkStrength(1)
+        .linkDistance(function(d){
+            var width = d.source.width/2 + d.target.width/2 + 25;
+            return width;
+        })
+    //.linkDistance(50)
+        .gravity(0.05)
+
+    return fn;
 }
 
 function viewrdf(element, w, h, url,nodeWidth) {
     var svg = d3.select(element);
     var chart = d3.select(svg.node().parentNode);
-    var force = d3.layout.force()
     var transMatrix = [1,0,0,1,0,0];
     var width = 0;
     var height = 0;
-
+    
     function updateSize() {
         width = parseInt(chart.style("width"));
         height = parseInt(chart.style("height"));
         svg.attr("width",width)
             .attr("height",height);
-        //force.stop()
-        force.size([width, height]);
-        //    .start();
     }
     $(window).resize(updateSize);
     updateSize();
     svg.append("rect").attr("width",10000)
         .attr('height',10000)
         .attr('fill','white');
-    var vis = svg.append("g");
+    var container = svg.append("g");
+    var vis = container.append("g");
+    var selector = container.append("rect")
+        .attr("class","selector")
+        .attr("display","none");
 
     loadGraph(url, function(graph) {
 
-        function pan(dx, dy) {       
-            transMatrix[4] += dx;
-            transMatrix[5] += dy;
-
-            newMatrix = "matrix(" +  transMatrix.join(' ') + ")";
-            vis.attr("transform", newMatrix);
-        }
-
-        function zoom(scale) {
-            for (var i=0; i<transMatrix.length; i++) {
-                transMatrix[i] *= scale;
-            }
-
-            transMatrix[4] += (1-scale)*width/2;
-            transMatrix[5] += (1-scale)*height/2;
-
-            newMatrix = "matrix(" +  transMatrix.join(' ') + ")";
-            vis.attr("transform", newMatrix);
-        }
-
-        function handleMouseWheel(evt) {
-            if(evt.preventDefault)
-                evt.preventDefault();
-
-            evt.returnValue = false;
-
-            var delta;
-
-            if (evt.wheelDelta) delta = evt.wheelDelta / 3600; // Chrome/Safari
-            else delta = evt.detail / -90; // Mozilla
-            var z = 1 + delta; // Zoom factor: 0.9/1.1
-            zoom(z);
-        }
-
-        var state = "none";
-        /**
-         * Handle mouse move event.
-        */
-        function handleMouseMove(evt) {
-            if(evt.preventDefault)
-                evt.preventDefault();
-    
-            evt.returnValue = false;
-    
-            var svgDoc = evt.target.ownerDocument;
-
-            var g = getRoot(svgDoc);
-    
-            if(state == 'pan' && enablePan) {
-                // Pan mode
-                var p = getEventPoint(evt).matrixTransform(stateTf);
-
-                setCTM(g, stateTf.inverse().translate(p.x - stateOrigin.x, p.y - stateOrigin.y));
-            } else if(state == 'drag' && enableDrag) {
-                // Drag mode
-                var p = getEventPoint(evt).matrixTransform(g.getCTM().inverse());
-                setCTM(stateTarget, root.createSVGMatrix().translate(p.x - stateOrigin.x, p.y - stateOrigin.y).multiply(g.getCTM().inverse()).multiply(stateTarget.getCTM()));
-                stateOrigin = p;
-            }
-        }
-
-        /**
-         * Handle click event.
-         */
-        function handleMouseDown(evt) {
-            if(evt.preventDefault)
-                evt.preventDefault();
-            evt.returnValue = false;
-            state = 'drag';
-        }
-
-        /**
-         * Handle mouse button release event.
-         */
-        function handleMouseUp(evt) {
-            if(evt.preventDefault)
-                evt.preventDefault();
-
-            evt.returnValue = false;
-
-            if(state == 'pan' || state == 'drag') {
-                // Quit pan mode
-                state = '';
-            }
-        }
-
-        force.charge(-1000)
-            .linkStrength(1)
-            .linkDistance(function(d){
-                var width = d.source.width/2 + d.target.width/2 + 25;
-                return width;
+        var zoomed = false;
+        // Set up zoom support
+        var inner = d3.select("svg g"),
+            zoom = d3.behavior.zoom().on("zoom", function() {
+                inner.attr("transform", "translate(" + d3.event.translate + ")" +
+                           "scale(" + d3.event.scale + ")");
+                zoomed = true;
             })
-        //.linkDistance(50)
-            .gravity(0.05)
-            .nodes(graph.nodes)
-            .links(graph.edges);
-            //.size([w, h]);
-        
+            .on("zoomstart", function() {
+                zoomed = false;
+            })
+            .on("zoomend", function() {
+                if (!zoomed) {
+                    selected = null;
+                    update();
+                }
+            });
+
         var links = makeLinkSVG(graph.edges, vis);
-        links.link.call(force.drag);
         
         var predicates = makePredicateSVG(graph.predicates, vis);
-        predicates.call(force.drag);
         
-        var node = makeNodeSVG(graph.entities, vis, nodeWidth, graph);
-        node.call(force.drag);
+        var node = makeNodeSVG(graph.entities, vis, nodeWidth, graph, render);
+
+        var selected = null;
         
-        svg.append("circle")
-            .attr("cx",50)
-            .attr("cy",50)
-            .attr("r",42)
-            .attr("fill","white")
-            .attr("opacity","0.75")
-        svg.append("path")
-            .attr("class","button")
-            .on("click",function() {pan(0,50)})
-            .attr("d","M50 10 l12 20 a40,70 0 0,0 -24,0z")
-        svg.append("path")
-            .attr("class","button")
-            .on("click", function() {pan(50,0)})
-            .attr("d","M10 50 l20 -12 a70,40 0 0,0 0,24z")
-        svg.append("path")
-            .attr("class","button")
-            .on("click",function(){pan(0,-50)})
-            .attr("d","M50 90 l12 -20 a40,70 0 0,1 -24,0z")
-        svg.append("path")
-            .attr("class","button")
-            .on("click",function(){pan(-50,0)})
-            .attr("d","M90 50 l-20 -12 a70,40 0 0,1 0,24z")
-  
-        svg.append("circle")
-            .attr("class","compass")
-            .attr("cx","50")
-            .attr("cy","50")
-            .attr("r","20")
-        svg.append("circle")
-            .attr("class","button")
-            .attr("cx","50")
-            .attr("cy","41")
-            .attr("r","8")
-            .on("click",function() {zoom(0.8)})
-        svg.append("circle")
-            .attr("class","button")
-            .attr("cx","50")
-            .attr("cy","59")
-            .attr("r","8")
-            .on("click",function(){zoom(1.25)})
+        var drag = d3.behavior.drag();
+        var moved = false;
+        drag.on("drag", function(d,i) {
+            d.x += d3.event.dx;
+            d.y += d3.event.dy;
+            update();
+            moved = true;
+        });
+        drag.on("dragstart", function(d) {
+            moved = false;
+            d3.event.sourceEvent.stopPropagation();
+            d3.select(this).classed("dragging", true);
+        });
+        drag.on("dragend", function(d) {
+            d3.select(this).classed("dragging", false);
+            if (!moved) {
+                selected = selected == d ? null : d;
+                update();
+            }
+        });
 
-        svg.append("rect")
-            .attr("class","plus-minus")
-            .attr("x","46")
-            .attr("y","39.5")
-            .attr("width","8")
-            .attr("height","3")
-        svg.append("rect")
-            .attr("class","plus-minus")
-            .attr("x","46")
-            .attr("y","57.5")
-            .attr("width","8")
-            .attr("height","3")
-        svg.append("rect")
-            .attr("class","plus-minus")
-            .attr("x","48.5")
-            .attr("y","55")
-            .attr("width","3")
-            .attr("height","8")
-	if(navigator.userAgent.toLowerCase().indexOf('webkit') >= 0)
-	    svg.node().addEventListener('mousewheel', handleMouseWheel, false); // Chrome/Safari
-	else
-	    svg.node().addEventListener('DOMMouseScroll', handleMouseWheel, false); // Others
-
-    //makeMenu(element);
-    var ticks = 0
-    force.on("tick", function() {
-        ticks += 1
-        if (ticks > 500) {
-            force.stop()
-                .charge(0)
-                .linkStrength(0)
-                .linkDistance(0)
-                .gravity(0)
-                .friction(0)
-                .start()
-                .stop();
-        } else {
-            force.stop();
-            force.linkDistance(function(d){
-                    var width = d.source.width/2 + d.target.width/2 + 50;
-                    return width;
+        node.call(drag);
+        predicates.call(drag);
+        svg.call(zoom);
+        
+        function update() {
+      	    links.link.selectAll("line.link")
+                .attr("x1", function(d) {
+                    var box = makeCenteredBox(d.source);
+                    var ept = edgePoint(box,
+                                        [d.source.x,d.source.y],
+                                        [d.target.x,d.target.y]);
+                    d.x1 = d.source.x;
+                    if (ept != null) {
+                        d.x1 = ept[0]
+                    }
+                    return d.x1; 
                 })
-                .start();
+                .attr("y1", function(d) {
+                    var box = makeCenteredBox(d.source);
+                    var ept = edgePoint(box,
+                                        [d.source.x,d.source.y],
+                                        [d.target.x,d.target.y]);
+                    d.y1 = d.source.y;
+                    if (ept != null) {
+                        d.y1 = ept[1]
+                    }
+                    return d.y1; 
+                })
+                .attr("x2", function(d) {
+                    var box = makeCenteredBox(d.target);
+                    var ept = edgePoint(box,
+                                        [d.source.x,d.source.y],
+                                        [d.target.x,d.target.y]);
+                    d.x2 = d.target.x;
+                    if (ept != null) {
+                        d.x2 = ept[0]
+                    }
+                    return d.x2; 
+                })
+                .attr("y2", function(d) { 
+                    var box = makeCenteredBox(d.target);
+                    var ept = edgePoint(box,
+                                        [d.source.x,d.source.y],
+                                        [d.target.x,d.target.y]);
+                    d.y2 = d.target.y;
+                    if (ept != null) {
+                        d.y2 = ept[1]
+                    }
+                    return d.y2; 
+                });
+
+            selector.attr("display",selected != null ? null: "none")
+                .attr("height",selected != null ? selected.height+2 : 0)
+                .attr("width",selected != null ? selected.width+2 : 0)
+                .attr("x",selected != null ? selected.x - selected.width/2 - 1 : 0)
+                .attr("y",selected != null ? selected.y - selected.height/2 - 1 : 0);
+
+            node.filter(function(d) { return d == selected})
+                .each(function(d) { d3.select(this).moveToFront()});
+            
+            predicates.filter(function(d) { return d == selected})
+                .each(function(d) { d3.select(this).moveToFront()});
+            
+            node.attr("x", function(d) {
+                    //d.x = Math.max(d.width/2, Math.min(w-d.width/2, d.x ));
+                    return d.x - d.width/2;
+                })
+                .attr("y", function(d) {
+                    //d.y = Math.max(d.height/2, Math.min(h-d.height/2, d.y ));
+                    return d.y - d.height/2;
+                })
+            
+            predicates.attr("x", function(d) {
+                //d.x = Math.max(10, Math.min(w-10, d.x ));
+                return d.x;
+            })
+                .attr("y", function(d) {
+                    //d.y = Math.max(10, Math.min(h-10, d.y ));
+                    return d.y;
+                })
+
+            links.arrowhead.attr("points", function(d) {
+                return [[d.x2,d.y2].join(","),
+                        [d.x2-3,d.y2+8].join(","),
+                        [d.x2+3,d.y2+8].join(",")].join(" ");
+            })
+                .attr("transform",function(d) {
+                    var angle = Math.atan2(d.y2-d.y1, d.x2-d.x1)*180/Math.PI + 90;
+                    return "rotate("+angle+", "+d.x2+", "+d.y2+")";
+                });
         }
-      	links.link.selectAll("line.link")
-            .attr("x1", function(d) {
-                var box = makeCenteredBox(d.source);
-                var ept = edgePoint(box,
-                                [d.source.x,d.source.y],
-                                [d.target.x,d.target.y]);
-                d.x1 = d.source.x;
-                if (ept != null) {
-                    d.x1 = ept[0]
-                }
-                return d.x1; 
-            })
-            .attr("y1", function(d) {
-                var box = makeCenteredBox(d.source);
-                var ept = edgePoint(box,
-                                [d.source.x,d.source.y],
-                                [d.target.x,d.target.y]);
-                d.y1 = d.source.y;
-                if (ept != null) {
-                    d.y1 = ept[1]
-                }
-                return d.y1; 
-            })
-            .attr("x2", function(d) {
-                var box = makeCenteredBox(d.target);
-                var ept = edgePoint(box,
-                                [d.source.x,d.source.y],
-                                [d.target.x,d.target.y]);
-                d.x2 = d.target.x;
-                if (ept != null) {
-                    d.x2 = ept[0]
-                }
-                return d.x2; 
-            })
-            .attr("y2", function(d) { 
-                var box = makeCenteredBox(d.target);
-                var ept = edgePoint(box,
-                                [d.source.x,d.source.y],
-                                [d.target.x,d.target.y]);
-                d.y2 = d.target.y;
-                if (ept != null) {
-                    d.y2 = ept[1]
-                }
-                return d.y2; 
+        
+        function render() {
+            node
+                .attr("height",function(d) {
+                    return d.height = this.childNodes[0].childNodes[0].clientHeight+4;
+                })
+                .attr("width",function(d) {
+                    if (d.width == 0 || d.width == nodeWidth) {
+                        d.width = this.childNodes[0].childNodes[0].clientWidth+4;
+                    }
+                    return d.width;
+                });
+            predicates.each(function(d) {
+                d.height = this.clientHeight+4;
+                d.width = this.clientWidth+4;
             });
-
-        node.attr("height",function(d) {
-            return d.height = this.childNodes[0].childNodes[0].clientHeight+4;
-        })
-            .attr("width",function(d) {
-                if (d.width == 0 || d.width == nodeWidth) {
-                    d.width = this.childNodes[0].childNodes[0].clientWidth+4;
-                }
-                return d.width;
-            })
-            .attr("x", function(d) {
-                //d.x = Math.max(d.width/2, Math.min(w-d.width/2, d.x ));
-                return d.x - d.width/2;
-            })
-            .attr("y", function(d) {
-                //d.y = Math.max(d.height/2, Math.min(h-d.height/2, d.y ));
-                return d.y - d.height/2;
-            });
-
-        predicates.attr("x", function(d) {
-            //d.x = Math.max(10, Math.min(w-10, d.x ));
-            return d.x;
-        })
-            .attr("y", function(d) {
-                //d.y = Math.max(10, Math.min(h-10, d.y ));
-                return d.y;
-            });
-
-        links.arrowhead.attr("points", function(d) {
-            return [[d.x2,d.y2].join(","),
-                    [d.x2-3,d.y2+8].join(","),
-                    [d.x2+3,d.y2+8].join(",")].join(" ");
-        })
-            .attr("transform",function(d) {
-                var angle = Math.atan2(d.y2-d.y1, d.x2-d.x1)*180/Math.PI + 90;
-                return "rotate("+angle+", "+d.x2+", "+d.y2+")";
-            });
-        //vis.attr("width", w)
-        //    .attr("height", h);
-        //force.size([width, height]);
-    });
-    force.start();
+            
+            layout.dagre(node.data(), predicates.data(), links.link.data());
+            update();
+        }
+        render();
     });
 }

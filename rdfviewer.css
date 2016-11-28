@@ -82,6 +82,12 @@ table.Plan {
   border-color: #d62728;
 }
 
+.selector {
+    stroke-width: 2px;
+    stroke: blue;
+    fill: none;
+}
+
 body {
     margin: 0px;
     padding: 0px;
