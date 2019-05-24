@@ -551,11 +551,11 @@ Graph.prototype.load = function(d) {
 }
 
 function loader(url, doLoad) {
-    $.getJSON("http://rdf-translator.appspot.com/convert/detect/rdf-json/"+url, doLoad)
+    $.getJSON("https://rdf-translator.appspot.com/convert/detect/rdf-json/"+url, doLoad)
         .error(function() {
-            $.getJSON("http://rdf-translator.appspot.com/convert/xml/rdf-json/"+url, doLoad)
+            $.getJSON("https://rdf-translator.appspot.com/convert/xml/rdf-json/"+url, doLoad)
                 .error(function() {
-                    $.getJSON("http://rdf-translator.appspot.com/convert/n3/rdf-json/"+url, doLoad)
+                    $.getJSON("https://rdf-translator.appspot.com/convert/n3/rdf-json/"+url, doLoad)
                         .error(function() {
                             alert("Could not load "+url); 
                         });
