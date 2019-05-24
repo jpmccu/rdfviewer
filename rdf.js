@@ -746,8 +746,8 @@ layout.dagre = function(nodes, predicates, links, rankDir) {
         g.setEdge(link.source.uri, link.target.uri);
     });
 
-    g.graph().nodesep = 20;
-    g.graph().ranksep = 20;
+    g.graph().nodesep = 40;
+    g.graph().ranksep = 40;
     g.graph().rankDir = rankDir;
     //g.graph().align = 'lr';
     //g.graph().ranker = "tight-tree";
